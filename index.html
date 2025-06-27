@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Notepad</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 800px;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            padding: 20px;
+            color: white;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .file-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"], input[type="password"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+            min-width: 200px;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .editor-container {
+            position: relative;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .editor-header {
+            background: #f5f5f5;
+            padding: 10px 15px;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #333;
+        }
+
+        #editor {
+            width: 100%;
+            height: 400px;
+            border: none;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            background: #fafafa;
+        }
+
+        #editor:focus {
+            outline: none;
+            background: white;
+        }
+
+        .file-list {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+
+        .file-list h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .file-date {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+
+        .modal-content h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-content input {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: -10px;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .file-controls {
+                flex-direction: column;
+            }
+            
+            .input-group {
+                flex-direction: column;
+            }
+            
+            input[type="text"], input[type="password"] {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Secure Notepad</h1>
+            <p>Create, save, and protect your notes with password encryption</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="file-controls">
+                <button class="btn btn-primary" onclick="newFile()">New File</button>
+                <button class="btn btn-success" onclick="saveFile()">Save File</button>
+                <button class="btn btn-secondary" onclick="showFileList()">View Files</button>
+            </div>
+
+            <div class="input-group">
+                <input type="text" id="fileName" placeholder="Enter file name..." />
+                <input type="password" id="filePassword" placeholder="Enter password for this file..." />
+            </div>
+
+            <div class="editor-container">
+                <div class="editor-header">
+                    <span id="currentFileName">Untitled Document</span>
+                </div>
+                <textarea id="editor" placeholder="Start typing your note here..."></textarea>
+            </div>
+
+            <div id="statusMessage"></div>
+
+            <div class="file-list" id="fileListContainer" style="display: none;">
+                <h3>📁 Saved Files</h3>
+                <div id="fileList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closePasswordModal()">&times;</span>
+            <h3>🔓 Enter Password</h3>
+            <input type="password" id="modalPassword" placeholder="File password..." />
+            <button class="btn btn-primary" onclick="openFileWithPassword()">Open File</button>
+        </div>
+    </div>
+
+    <script>
+        // In-memory storage for the session
+        let filesData = {};
+        let currentFile = null;
+        let selectedFileForOpen = null;
+
+        // Simple encryption/decryption functions
+        function simpleEncrypt(text, password) {
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ password.charCodeAt(i % password.length));
+            }
+            return btoa(result);
+        }
+
+        function simpleDecrypt(encryptedText, password) {
+            try {
+                const text = atob(encryptedText);
+                let result = '';
+                for (let i = 0; i < text.length; i++) {
+                    result += String.fromCharCode(text.charCodeAt(i) ^ password.charCodeAt(i % password.length));
+                }
+                return result;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Load files from memory on page load
+        function loadFiles() {
+            // In a real implementation, you would load from localStorage here
+            // For this demo, we start with empty storage
+            updateFileDisplay();
+        }
+
+        function showMessage(message, isError = false) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+        }
+
+        function newFile() {
+            document.getElementById('editor').value = '';
+            document.getElementById('fileName').value = '';
+            document.getElementById('filePassword').value = '';
+            document.getElementById('currentFileName').textContent = 'Untitled Document';
+            currentFile = null;
+            showMessage('New file created');
+        }
+
+        function saveFile() {
+            const fileName = document.getElementById('fileName').value.trim();
+            const password = document.getElementById('filePassword').value;
+            const content = document.getElementById('editor').value;
+
+            if (!fileName) {
+                showMessage('Please enter a file name', true);
+                return;
+            }
+
+            if (!password) {
+                showMessage('Please enter a password for the file', true);
+                return;
+            }
+
+            if (!content.trim()) {
+                showMessage('Cannot save empty file', true);
+                return;
+            }
+
+            try {
+                const encryptedContent = simpleEncrypt(content, password);
+                const fileData = {
+                    name: fileName,
+                    content: encryptedContent,
+                    dateCreated: new Date().toISOString(),
+                    dateModified: new Date().toISOString()
+                };
+
+                filesData[fileName] = fileData;
+                currentFile = fileName;
+                document.getElementById('currentFileName').textContent = fileName;
+                
+                showMessage(`File "${fileName}" saved successfully`);
+                updateFileDisplay();
+            } catch (error) {
+                showMessage('Error saving file', true);
+            }
+        }
+
+        function showFileList() {
+            const container = document.getElementById('fileListContainer');
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+            updateFileDisplay();
+        }
+
+        function updateFileDisplay() {
+            const fileListDiv = document.getElementById('fileList');
+            const fileNames = Object.keys(filesData);
+
+            if (fileNames.length === 0) {
+                fileListDiv.innerHTML = '<p>No files saved yet.</p>';
+                return;
+            }
+
+            fileListDiv.innerHTML = fileNames.map(fileName => {
+                const file = filesData[fileName];
+                const date = new Date(file.dateModified).toLocaleDateString();
+                return `
+                    <div class="file-item">
+                        <div>
+                            <div class="file-name">${fileName}</div>
+                            <div class="file-date">Modified: ${date}</div>
+                        </div>
+                        <div class="file-actions">
+                            <button class="btn btn-primary btn-small" onclick="requestOpenFile('${fileName}')">Open</button>
+                            <button class="btn btn-secondary btn-small" onclick="deleteFile('${fileName}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function requestOpenFile(fileName) {
+            selectedFileForOpen = fileName;
+            document.getElementById('modalPassword').value = '';
+            document.getElementById('passwordModal').style.display = 'block';
+        }
+
+        function openFileWithPassword() {
+            const password = document.getElementById('modalPassword').value;
+            
+            if (!password) {
+                showMessage('Please enter the password', true);
+                return;
+            }
+
+            const file = filesData[selectedFileForOpen];
+            if (!file) {
+                showMessage('File not found', true);
+                closePasswordModal();
+                return;
+            }
+
+            const decryptedContent = simpleDecrypt(file.content, password);
+            
+            if (decryptedContent === null) {
+                showMessage('Incorrect password', true);
+                return;
+            }
+
+            // Successfully opened file
+            document.getElementById('editor').value = decryptedContent;
+            document.getElementById('fileName').value = selectedFileForOpen;
+            document.getElementById('filePassword').value = password;
+            document.getElementById('currentFileName').textContent = selectedFileForOpen;
+            currentFile = selectedFileForOpen;
+            
+            closePasswordModal();
+            showMessage(`File "${selectedFileForOpen}" opened successfully`);
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+            selectedFileForOpen = null;
+        }
+
+        function deleteFile(fileName) {
+            if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
+                delete filesData[fileName];
+                showMessage(`File "${fileName}" deleted`);
+                updateFileDisplay();
+                
+                if (currentFile === fileName) {
+                    newFile();
+                }
+            }
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('passwordModal');
+            if (event.target === modal) {
+                closePasswordModal();
+            }
+        }
+
+        // Handle Enter key in password modal
+        document.getElementById('modalPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                openFileWithPassword();
+            }
+        });
+
+        // Load files when page loads
+        loadFiles();
+    </script>
+</body>
+</html>
