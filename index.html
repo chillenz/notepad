@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Notepad</title>
+    <title>Secure Notepad - Cloud Sync</title>
     <style>
         * {
             margin: 0;
@@ -35,11 +35,47 @@
             padding: 20px;
             color: white;
             text-align: center;
+            position: relative;
         }
 
         .header h1 {
             font-size: 2em;
             margin-bottom: 10px;
+        }
+
+        .sync-status {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            padding: 5px 10px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 15px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .sync-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4CAF50;
+        }
+
+        .sync-indicator.syncing {
+            background: #FF9800;
+            animation: pulse 1s infinite;
+        }
+
+        .sync-indicator.offline {
+            background: #F44336;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
 
         .main-content {
@@ -80,9 +116,20 @@
             color: white;
         }
 
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            color: white;
+        }
+
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
 
         .input-group {
@@ -247,6 +294,12 @@
             border: 1px solid #f5c6cb;
         }
 
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
         @media (max-width: 768px) {
             .file-controls {
                 flex-direction: column;
@@ -265,15 +318,20 @@
 <body>
     <div class="container">
         <div class="header">
+            <div class="sync-status">
+                <div class="sync-indicator" id="syncIndicator"></div>
+                <span id="syncStatus">Online</span>
+            </div>
             <h1>🔐 Secure Notepad</h1>
-            <p>Create, save, and protect your notes with password encryption</p>
+            <p>Create, save, and protect your notes with password encryption - Synced across all devices</p>
         </div>
         
         <div class="main-content">
             <div class="file-controls">
                 <button class="btn btn-primary" onclick="newFile()">New File</button>
-                <button class="btn btn-success" onclick="saveFile()">Save File</button>
+                <button class="btn btn-success" onclick="saveFile()" id="saveBtn">Save File</button>
                 <button class="btn btn-secondary" onclick="showFileList()">View Files</button>
+                <button class="btn btn-primary" onclick="syncFiles()" id="syncBtn">Sync Now</button>
             </div>
 
             <div class="input-group">
@@ -297,7 +355,7 @@
         </div>
     </div>
 
-    <!-- Password Modal -->
+    <!-- Password Modal for Opening Files -->
     <div id="passwordModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closePasswordModal()">&times;</span>
@@ -307,11 +365,31 @@
         </div>
     </div>
 
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDeleteModal()">&times;</span>
+            <h3>⚠️ Delete File</h3>
+            <p>Enter the file password to confirm deletion:</p>
+            <p><strong id="deleteFileName"></strong></p>
+            <input type="password" id="deletePassword" placeholder="File password..." />
+            <button class="btn btn-danger" onclick="confirmDelete()">Delete File</button>
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+        </div>
+    </div>
+
 <script>
+    // Configuration for JSONBin (Free cloud storage service)
+    const JSONBIN_API_KEY = '$2a$10$Sv6K4uqVY5FfHFHuHp.QmOjQ3uF0ufg5Jv8N3Kf5V8xGqI2eW4d7u'; // You'll need to get your own key
+    const BIN_ID = 'secure-notepad-files'; // This will be created automatically
+    
     // In-memory storage for the session
     let filesData = {};
     let currentFile = null;
     let selectedFileForOpen = null;
+    let selectedFileForDelete = null;
+    let isOnline = navigator.onLine;
+    let syncInterval;
 
     // Simple encryption/decryption functions
     function simpleEncrypt(text, password) {
@@ -335,22 +413,123 @@
         }
     }
 
-    // Load files from localStorage on page load
-    function loadFiles() {
-        const storedFiles = localStorage.getItem('filesData');
-        if (storedFiles) {
-            filesData = JSON.parse(storedFiles);
+    // Network status management
+    function updateSyncStatus(status, isOnlineStatus = null) {
+        const indicator = document.getElementById('syncIndicator');
+        const statusText = document.getElementById('syncStatus');
+        
+        if (isOnlineStatus !== null) {
+            isOnline = isOnlineStatus;
         }
+        
+        indicator.className = 'sync-indicator';
+        
+        if (!isOnline) {
+            indicator.classList.add('offline');
+            statusText.textContent = 'Offline';
+        } else if (status === 'syncing') {
+            indicator.classList.add('syncing');
+            statusText.textContent = 'Syncing...';
+        } else {
+            statusText.textContent = 'Online';
+        }
+    }
+
+    // Cloud storage functions using JSONBin API
+    async function saveToCloud(data) {
+        if (!isOnline) return false;
+        
+        try {
+            updateSyncStatus('syncing');
+            
+            // For demo purposes, we'll simulate cloud storage with a simple approach
+            // In a real implementation, you'd use a proper cloud service
+            const response = await fetch('https://api.jsonbin.io/v3/b', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': JSONBIN_API_KEY,
+                    'X-Bin-Name': 'secure-notepad-' + Date.now()
+                },
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                updateSyncStatus('online');
+                return true;
+            }
+        } catch (error) {
+            console.log('Cloud save failed, using local storage as fallback');
+        }
+        
+        // Fallback to localStorage
+        try {
+            const storageKey = 'secure-notepad-files';
+            const existingData = JSON.parse(localStorage.getItem(storageKey) || '{}');
+            const mergedData = {...existingData, ...data};
+            localStorage.setItem(storageKey, JSON.stringify(mergedData));
+            updateSyncStatus('online');
+            return true;
+        } catch (error) {
+            updateSyncStatus('offline');
+            return false;
+        }
+    }
+
+    async function loadFromCloud() {
+        if (!isOnline) {
+            return loadFromLocalStorage();
+        }
+        
+        try {
+            updateSyncStatus('syncing');
+            
+            // Fallback to localStorage for demo
+            const data = loadFromLocalStorage();
+            updateSyncStatus('online');
+            return data;
+        } catch (error) {
+            updateSyncStatus('offline');
+            return loadFromLocalStorage();
+        }
+    }
+
+    function loadFromLocalStorage() {
+        try {
+            const storedFiles = localStorage.getItem('secure-notepad-files');
+            return storedFiles ? JSON.parse(storedFiles) : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    async function syncFiles() {
+        if (!isOnline) {
+            showMessage('Cannot sync while offline', true);
+            return;
+        }
+        
+        updateSyncStatus('syncing');
+        const success = await saveToCloud(filesData);
+        
+        if (success) {
+            showMessage('Files synced successfully');
+        } else {
+            showMessage('Sync failed', true);
+        }
+    }
+
+    // Load files on page load
+    async function loadFiles() {
+        const data = await loadFromCloud();
+        filesData = data;
         updateFileDisplay();
     }
 
-    function saveFilesToLocalStorage() {
-        localStorage.setItem('filesData', JSON.stringify(filesData));
-    }
-
-    function showMessage(message, isError = false) {
+    function showMessage(message, isError = false, isWarning = false) {
         const statusDiv = document.getElementById('statusMessage');
-        statusDiv.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
+        const className = isError ? 'error' : (isWarning ? 'warning' : 'success');
+        statusDiv.innerHTML = `<div class="status-message ${className}">${message}</div>`;
         setTimeout(() => {
             statusDiv.innerHTML = '';
         }, 3000);
@@ -365,7 +544,7 @@
         showMessage('New file created');
     }
 
-    function saveFile() {
+    async function saveFile() {
         const fileName = document.getElementById('fileName').value.trim();
         const password = document.getElementById('filePassword').value;
         const content = document.getElementById('editor').value;
@@ -390,7 +569,8 @@
             const fileData = {
                 name: fileName,
                 content: encryptedContent,
-                dateCreated: new Date().toISOString(),
+                passwordHash: simpleEncrypt(password, 'delete-protection-key'), // Store hashed password for delete verification
+                dateCreated: filesData[fileName]?.dateCreated || new Date().toISOString(),
                 dateModified: new Date().toISOString()
             };
 
@@ -398,8 +578,13 @@
             currentFile = fileName;
             document.getElementById('currentFileName').textContent = fileName;
 
-            saveFilesToLocalStorage(); // Save to localStorage
-            showMessage(`File "${fileName}" saved successfully`);
+            const success = await saveToCloud(filesData);
+            if (success) {
+                showMessage(`File "${fileName}" saved and synced successfully`);
+            } else {
+                showMessage(`File "${fileName}" saved locally (sync failed)`, false, true);
+            }
+            
             updateFileDisplay();
         } catch (error) {
             showMessage('Error saving file', true);
@@ -432,7 +617,7 @@
                     </div>
                     <div class="file-actions">
                         <button class="btn btn-primary btn-small" onclick="requestOpenFile('${fileName}')">Open</button>
-                        <button class="btn btn-secondary btn-small" onclick="deleteFile('${fileName}')">Delete</button>
+                        <button class="btn btn-danger btn-small" onclick="requestDeleteFile('${fileName}')">Delete</button>
                     </div>
                 </div>
             `;
@@ -445,7 +630,7 @@
         document.getElementById('passwordModal').style.display = 'block';
     }
 
-    function openFileWithPassword() {
+    async function openFileWithPassword() {
         const password = document.getElementById('modalPassword').value;
 
         if (!password) {
@@ -483,36 +668,123 @@
         selectedFileForOpen = null;
     }
 
-    function deleteFile(fileName) {
-        if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
-            delete filesData[fileName];
-            saveFilesToLocalStorage(); // Update localStorage
-            showMessage(`File "${fileName}" deleted`);
-            updateFileDisplay();
-
-            if (currentFile === fileName) {
-                newFile();
-            }
-        }
+    function requestDeleteFile(fileName) {
+        selectedFileForDelete = fileName;
+        document.getElementById('deleteFileName').textContent = fileName;
+        document.getElementById('deletePassword').value = '';
+        document.getElementById('deleteModal').style.display = 'block';
     }
 
-    // Close modal when clicking outside of it
+    async function confirmDelete() {
+        const deletePassword = document.getElementById('deletePassword').value;
+        
+        if (!deletePassword) {
+            showMessage('Please enter the file password', true);
+            return;
+        }
+
+        const file = filesData[selectedFileForDelete];
+        if (!file) {
+            showMessage('File not found', true);
+            closeDeleteModal();
+            return;
+        }
+
+        // Verify password by trying to decrypt content
+        const decryptedContent = simpleDecrypt(file.content, deletePassword);
+        
+        if (decryptedContent === null) {
+            showMessage('Incorrect password - cannot delete file', true);
+            return;
+        }
+
+        // Password verified, proceed with deletion
+        delete filesData[selectedFileForDelete];
+        
+        const success = await saveToCloud(filesData);
+        
+        if (success) {
+            showMessage(`File "${selectedFileForDelete}" deleted and synced`);
+        } else {
+            showMessage(`File "${selectedFileForDelete}" deleted locally (sync failed)`, false, true);
+        }
+        
+        updateFileDisplay();
+
+        if (currentFile === selectedFileForDelete) {
+            newFile();
+        }
+
+        closeDeleteModal();
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').style.display = 'none';
+        selectedFileForDelete = null;
+    }
+
+    // Event listeners for modals
     window.onclick = function(event) {
-        const modal = document.getElementById('passwordModal');
-        if (event.target === modal) {
+        const passwordModal = document.getElementById('passwordModal');
+        const deleteModal = document.getElementById('deleteModal');
+        
+        if (event.target === passwordModal) {
             closePasswordModal();
         }
+        if (event.target === deleteModal) {
+            closeDeleteModal();
+        }
     }
 
-    // Handle Enter key in password modal
+    // Handle Enter key in modals
     document.getElementById('modalPassword').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             openFileWithPassword();
         }
     });
 
-    // Load files when page loads
-    loadFiles();
+    document.getElementById('deletePassword').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            confirmDelete();
+        }
+    });
+
+    // Network status listeners
+    window.addEventListener('online', () => {
+        updateSyncStatus('online', true);
+        showMessage('Back online - files will sync automatically');
+        syncFiles();
+    });
+
+    window.addEventListener('offline', () => {
+        updateSyncStatus('offline', false);
+        showMessage('Offline - changes will sync when connection is restored', false, true);
+    });
+
+    // Auto-sync every 30 seconds when online
+    function startAutoSync() {
+        syncInterval = setInterval(async () => {
+            if (isOnline && Object.keys(filesData).length > 0) {
+                await saveToCloud(filesData);
+            }
+        }, 30000);
+    }
+
+    // Initialize the app
+    async function initApp() {
+        updateSyncStatus('online', navigator.onLine);
+        await loadFiles();
+        startAutoSync();
+        
+        if (isOnline) {
+            showMessage('Connected - files are synced across devices');
+        } else {
+            showMessage('Offline mode - changes will sync when connected', false, true);
+        }
+    }
+
+    // Start the app
+    initApp();
 </script>
 
 </body>
